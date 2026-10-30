@@ -13,6 +13,14 @@ TG_CHAT_ID = os.getenv("TG_CHAT_ID", "")
 
 WECHAT_API_URL = os.getenv("WECHAT_API_URL", "https://wx.djcf.pp.ua/wxsend")
 WECHAT_AUTH_TOKEN = os.getenv("WECHAT_AUTH_TOKEN", "")
+
+# 自动获取 GitHub 仓库与运行 ID，生成无星号的完整直达链接
+GITHUB_REPOSITORY = os.getenv("GITHUB_REPOSITORY", "")
+GITHUB_RUN_ID = os.getenv("GITHUB_RUN_ID", "")
+if GITHUB_REPOSITORY and GITHUB_RUN_ID:
+  run_link = f"https://github.com/{GITHUB_REPOSITORY}/actions/runs/{GITHUB_RUN_ID}"
+else:
+  run_link = "https://github.com"
 # ===============================================================
 
 BASE_URL = "https://www.appx64.com"
@@ -74,45 +82,37 @@ def main():
       print(f"当前页面 URL: {page.url}")
 
       print("正在精准定位并填写账号密码...")
-      # WordPress 默认后台专属 ID
       page.wait_for_selector("#user_login", timeout=15000)
       
-      # 显式点击并填入账号密码
       page.click("#user_login")
       page.fill("#user_login", USERNAME)
       
       page.click("#user_pass")
       page.fill("#user_pass", PASSWORD)
       
-      # 勾选“记住我”
       try:
         page.check("#rememberme")
       except:
         pass
 
       print("正在点击登录按钮...")
-      # 点击登录，并等待页面跳转离开 wp-login.php
       with page.expect_navigation(timeout=30000):
         page.click("#wp-submit")
 
       print(f"登录跳转后的 URL: {page.url}")
 
-      # 如果跳转后仍然包含 wp-login.php，说明登录被拒绝或账号密码未被接受
       if "wp-login.php" in page.url:
         page.screenshot(path="assets_page_debug.png", full_page=True)
         raise Exception("登录失败：提交后仍停留在登录页，请核对 Secrets 中的账号与密码是否正确。")
 
       print("[2/3] 正在进入 VIP 个人中心执行签到...")
       page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
-      time.sleep(5)  # 等待页面完全渲染
+      time.sleep(5)
 
-      # 📸 保存登录后的资产页截图
       page.screenshot(path="assets_page_debug.png", full_page=True)
 
-      # 签到处理逻辑
       sign_status = "未知"
       try:
-        # 定位右上角的签到按钮/状态标识 (a.usercheck)
         sign_btn = page.locator("a.usercheck").first
         if sign_btn.count() > 0:
           btn_text = sign_btn.inner_text().strip()
@@ -128,7 +128,7 @@ def main():
             sign_status = "签到成功"
         else:
           if "已签到" in page.content():
-            sign_status = "今日已签到"
+            sign_status = "今日已签`到"
           else:
             page.locator("text=签到").first.click()
             time.sleep(4)
@@ -140,7 +140,6 @@ def main():
         else:
           sign_status = "签到状态未知"
 
-      # 刷新页面以获取最新的金币资产
       page.reload(wait_until="networkidle")
       time.sleep(3)
       html_content = page.content()
@@ -157,7 +156,8 @@ def main():
           f"状态: {sign_status}\n\n"
           f"• 消费金币: {spent_coins}\n"
           f"• 剩余金币: {left_coins}\n"
-          f"• 执行平台: GitHub Actions"
+          f"• 执行平台: GitHub Actions\n"
+          f"• [查看运行日志]({run_link})"
       )
 
       print(msg_content)
@@ -168,7 +168,7 @@ def main():
         page.screenshot(path="error_screenshot.png", full_page=True)
       except:
         pass
-      error_msg = f"❌ 小兵下载站签到异常\n\n错误原因: {str(e)}"
+      error_msg = f"❌ 小兵下载站签到异常\n\n错误原因: {str(e)}\n\n[查看失败日志]({run_link})"
       print(error_msg)
       send_notification("【异常】小兵下载站签到失败", error_msg)
       raise e
