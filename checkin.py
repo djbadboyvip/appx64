@@ -73,19 +73,17 @@ def main():
       print("[1/3] 正在访问登录页...")
       page.goto(f"{BASE_URL}/login", timeout=60000, wait_until="networkidle")
       
-      # 额外给 5 秒让 Cloudflare 验证自动通过或加载完毕
+      # 额外给 5 秒让 Cloudflare 验证自动通过
       time.sleep(5)
 
-      # 打印当前标题和 URL，方便在 Actions 日志中确认是否被墙
-      print(f"当前页面标题: {page.title()}")
-      print(f"当前页面 URL: {page.url()}")
+      # 修正：page.url 和 page.title 是属性，直接调用不要加括号
+      print(f"当前页面标题: {page.title}")
+      print(f"当前页面 URL: {page.url}")
 
-      # 如果被 CF 拦截，截图保存（后续可在 Github Actions 中下载查看）
+      # 截图保存，方便在 Artifacts 中查看
       page.screenshot(path="debug_login.png")
 
       print("正在查找账号密码输入框...")
-      # 使用更通用的选择器尝试匹配输入框（支持 name, id 或 placeholder）
-      # 如果您的网站输入框属性不同，可以在这里调整
       username_selector = "input[name='username'], input[type='text'], input[placeholder*='账号'], input[placeholder*='邮箱']"
       password_selector = "input[name='password'], input[type='password'], input[placeholder*='密码']"
 
@@ -95,11 +93,10 @@ def main():
       page.fill(password_selector, PASSWORD)
 
       print("正在点击登录按钮...")
-      # 寻找提交按钮
       submit_selector = "button[type='submit'], input[type='submit'], button:has-text('登录')"
       page.click(submit_selector)
       
-      # 等待登录后跳转
+      # 等待登录跳转
       time.sleep(5)
 
       print("[2/3] 正在访问资产/个人中心页执行签到...")
@@ -143,7 +140,6 @@ def main():
       send_notification(msg_title, msg_content)
 
     except Exception as e:
-      # 发生异常时，尝试截屏保存
       try:
         page.screenshot(path="error_screenshot.png")
       except:
