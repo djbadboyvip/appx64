@@ -157,8 +157,9 @@ def main():
           f"• 消费金币: {spent_coins}\n"
           f"• 剩余金币: {left_coins}\n"
           f"• 执行平台: GitHub Actions\n"
-          f"• [查看运行日志]({run_link})"
+          f"• [官网直达](https://www.appx64.com/vip?pd=money)"
       )
+      
 
       print(msg_content)
       send_notification(msg_title, msg_content)
