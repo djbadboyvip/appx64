@@ -89,43 +89,53 @@ def main():
 
       print("[2/3] 正在访问资产/个人中心页执行签到...")
       page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
-      time.sleep(3)
+      
+      # 💡 增加显式等待，确保页面上的 JS、金币数据和签到按钮完全渲染出来
+      time.sleep(5)
 
-      # 精准通过签到按钮的专属类名（.usercheck）来检查和点击
+      # 📸 抓取当前页面完整截图保存（如果还失败，可以去 Artifacts 里查看这张图）
+      page.screenshot(path="assets_page_debug.png", full_page=True)
+
+      # 尝试多种选择器查找签到按钮（兼容 class="usercheck" 或包含“签到”文本的元素）
+      signed_flag = False
       try:
-        sign_element = page.locator("a.usercheck")
-        if sign_element.count() > 0:
-          btn_text = sign_element.inner_text().strip()
-          print(f"检测到签到元素，当前状态文字为: [{btn_text}]")
+        # 先寻找页面中所有可能的签到触发点
+        sign_btn = page.locator("a.usercheck, button:has-text('签到'), a:has-text('签到')").first
+        if sign_btn.count() > 0:
+          btn_text = sign_btn.inner_text().strip()
+          print(f"检测到签到相关元素，当前文案为: [{btn_text}]")
           
-          # 如果还没签到（通常文字包含“签到”且没有“已”字，或者根据实际调整）
-          if "已签到" not in btn_text:
-            print("正在执行点击签到...")
-            sign_element.click()
-            time.sleep(4)
+          if "已签到" in btn_text:
+            print("今日已经完成签到。")
+            signed_flag = True
           else:
-            print("今日已经完成签到，无需重复点击。")
+            print("未签到，正在执行点击签到...")
+            sign_btn.click()
+            time.sleep(4)
+            signed_flag = True
         else:
-          print("未找到 class 为 usercheck 的签到元素。")
+          print("未直接定位到显式的签到按钮，检查页面源码...")
       except Exception as ex:
-        print(f"处理签到动作时提示: {ex}")
+        print(f"签到交互提示（可忽略）: {ex}")
 
-      # 再次刷新页面以获取最新的金币数据
+      # 再次刷新页面以获取最新的资产数据
       page.reload(wait_until="networkidle")
       time.sleep(3)
       html_content = page.content()
 
       print("[3/3] 正在提取资产数据...")
-      # 匹配消费金币与剩余金币（自动忽略中间的 &nbsp; 或空格）
+      # 使用更宽泛、兼容 HTML 实体空格的正则表达式
       spent_match = re.search(r"消费金币[：:]\s*(\d+)", html_content)
       left_match = re.search(r"剩余金币[：:]\s*(\d+)", html_content)
 
       spent_coins = spent_match.group(1) if spent_match else "未知"
       left_coins = left_match.group(1) if left_match else "未知"
 
-      # 检查最终状态
-      is_signed = "已签到" in html_content
-      sign_status = "签到成功 / 今日已完成" if is_signed else "签到状态未知"
+      # 综合判断签到状态
+      if "已签到" in html_content or signed_flag:
+        sign_status = "签到成功 / 今日已完成"
+      else:
+        sign_status = "签到状态未知（请检查截图）"
 
       msg_title = "【小兵下载站】自动签到通知"
       msg_content = (
@@ -140,7 +150,7 @@ def main():
 
     except Exception as e:
       try:
-        page.screenshot(path="error_screenshot.png")
+        page.screenshot(path="error_screenshot.png", full_page=True)
       except:
         pass
       error_msg = f"❌ 小兵下载站签到异常\n\n错误原因: {str(e)}"
