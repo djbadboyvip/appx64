@@ -156,7 +156,7 @@ def main():
           f"状态: {sign_status}\n\n"
           f"• 消费金币: {spent_coins}\n"
           f"• 剩余金币: {left_coins}\n"
-          f"• 执行平台: GitHub Actions\n"
+          f"• 执行平台: GitHub Actions-djbdaboyvip\n"
           f"• [官网直达](https://www.appx64.com/vip?pd=money)"
       )
       
