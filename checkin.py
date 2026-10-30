@@ -20,7 +20,6 @@ BASE_URL = "https://www.appx64.com"
 
 def send_notification(title, content):
   """发送通知到 Telegram 和 自建微信 API"""
-  # 1. 发送 Telegram 消息
   if TG_BOT_TOKEN and TG_CHAT_ID:
     try:
       tg_url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
@@ -34,10 +33,13 @@ def send_notification(title, content):
     except Exception as e:
       print(f"-> Telegram 推送异常: {e}")
 
-  # 2. 发送自建微信消息
   if WECHAT_API_URL:
     try:
-      headers = {"Authorization": f"Bearer {WECHAT_AUTH_TOKEN}"} if WECHAT_AUTH_TOKEN else {}
+      headers = (
+          {"Authorization": f"Bearer {WECHAT_AUTH_TOKEN}"}
+          if WECHAT_AUTH_TOKEN
+          else {}
+      )
       payload = {"title": title, "content": content}
       requests.post(WECHAT_API_URL, json=payload, headers=headers, timeout=10)
       print("-> 微信通知已发送")
@@ -47,19 +49,21 @@ def send_notification(title, content):
 
 def main():
   with sync_playwright() as p:
-    # 启动 Chromium 浏览器 (headless=True 在云端运行)
+    # 启动浏览器，增加反检测参数
     browser = p.chromium.launch(
         headless=True,
         args=[
             "--disable-blink-features=AutomationControlled",
             "--no-sandbox",
             "--disable-setuid-sandbox",
+            "--disable-infobars",
+            "--window-size=1280,800",
         ],
     )
     context = browser.new_context(
         user_agent=(
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,"
-            " like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            " like Gecko) Chrome/122.0.0.0 Safari/537.36"
         ),
         viewport={"width": 1280, "height": 800},
     )
@@ -67,42 +71,57 @@ def main():
 
     try:
       print("[1/3] 正在访问登录页...")
-      page.goto(f"{BASE_URL}/login", timeout=60000)
-      time.sleep(3)  # 等待 Cloudflare 验证加载/通过
+      page.goto(f"{BASE_URL}/login", timeout=60000, wait_until="networkidle")
+      
+      # 额外给 5 秒让 Cloudflare 验证自动通过或加载完毕
+      time.sleep(5)
 
-      # 检查是否需要手动输入或填写表单
-      # 请根据实际网站的输入框选择器调整 (比如 input[name='username'] 等)
-      print("正在输入账号密码...")
-      page.fill("input[name='username']", USERNAME)
-      page.fill("input[name='password']", PASSWORD)
+      # 打印当前标题和 URL，方便在 Actions 日志中确认是否被墙
+      print(f"当前页面标题: {page.title()}")
+      print(f"当前页面 URL: {page.url()}")
 
-      # 点击登录按钮
-      page.click("button[type='submit']")
-      time.sleep(5)  # 等待登录跳转
+      # 如果被 CF 拦截，截图保存（后续可在 Github Actions 中下载查看）
+      page.screenshot(path="debug_login.png")
+
+      print("正在查找账号密码输入框...")
+      # 使用更通用的选择器尝试匹配输入框（支持 name, id 或 placeholder）
+      # 如果您的网站输入框属性不同，可以在这里调整
+      username_selector = "input[name='username'], input[type='text'], input[placeholder*='账号'], input[placeholder*='邮箱']"
+      password_selector = "input[name='password'], input[type='password'], input[placeholder*='密码']"
+
+      page.wait_for_selector(username_selector, timeout=15000)
+
+      page.fill(username_selector, USERNAME)
+      page.fill(password_selector, PASSWORD)
+
+      print("正在点击登录按钮...")
+      # 寻找提交按钮
+      submit_selector = "button[type='submit'], input[type='submit'], button:has-text('登录')"
+      page.click(submit_selector)
+      
+      # 等待登录后跳转
+      time.sleep(5)
 
       print("[2/3] 正在访问资产/个人中心页执行签到...")
-      page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000)
+      page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
       time.sleep(3)
 
-      # 检查页面中是否有签到按钮并点击（如果未签到的话）
-      # 从页面结构看，如果显示“已签到”说明完成了，否则寻找签到按钮
+      # 检查签到按钮
       content = page.content()
       if "已签到" not in content:
         print("检测到未签到，尝试寻找签到按钮...")
-        # 尝试点击页面上的签到元素（根据实际网页调整选择器）
         try:
           page.click("text=签到", timeout=5000)
           time.sleep(3)
         except:
-          print("未直接找到‘签到’文字按钮，可能已由其他逻辑触发或需手动确认。")
+          print("未直接找到‘签到’文字按钮，可能已由其他逻辑触发。")
 
       # 刷新页面获取最新资产数据
-      page.reload()
+      page.reload(wait_until="networkidle")
       time.sleep(3)
       html_content = page.content()
 
       print("[3/3] 正在提取资产数据...")
-      # 使用正则匹配消费金币与剩余金币
       spent_match = re.search(r"消费金币[：:]\s*(\d+)", html_content)
       left_match = re.search(r"剩余金币[：:]\s*(\d+)", html_content)
 
@@ -124,6 +143,12 @@ def main():
       send_notification(msg_title, msg_content)
 
     except Exception as e:
+      # 发生异常时，尝试截屏保存
+      try:
+        page.screenshot(path="error_screenshot.png")
+      except:
+        pass
+
       error_msg = f"❌ 小兵下载站签到异常\n\n错误原因: {str(e)}"
       print(error_msg)
       send_notification("【异常】小兵下载站签到失败", error_msg)
