@@ -1,5 +1,6 @@
 name: AppX64 Auto 签到金币
 
+
 on:
   schedule:
     - cron: '30 23 * * *'
@@ -17,7 +18,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip' # 自动缓存 pip 依赖
+          # 已移除导致报错的 cache: 'pip'
 
       - name: 缓存 Playwright 浏览器内核
         uses: actions/cache@v4
