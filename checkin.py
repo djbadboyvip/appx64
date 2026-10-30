@@ -19,7 +19,6 @@ BASE_URL = "https://www.appx64.com"
 
 
 def send_notification(title, content):
-  """发送通知到 Telegram 和 自建微信 API"""
   if TG_BOT_TOKEN and TG_CHAT_ID:
     try:
       tg_url = f"https://api.telegram.org/bot{TG_BOT_TOKEN}/sendMessage"
@@ -29,7 +28,6 @@ def send_notification(title, content):
           "parse_mode": "Markdown",
       }
       requests.post(tg_url, data=payload, timeout=10)
-      print("-> Telegram 通知已发送")
     except Exception as e:
       print(f"-> Telegram 推送异常: {e}")
 
@@ -42,14 +40,12 @@ def send_notification(title, content):
       )
       payload = {"title": title, "content": content}
       requests.post(WECHAT_API_URL, json=payload, headers=headers, timeout=10)
-      print("-> 微信通知已发送")
     except Exception as e:
       print(f"-> 微信推送异常: {e}")
 
 
 def main():
   with sync_playwright() as p:
-    # 启动浏览器，增加反检测参数
     browser = p.chromium.launch(
         headless=True,
         args=[
@@ -71,65 +67,65 @@ def main():
 
     try:
       print("[1/3] 正在访问登录页...")
-      # 因为小兵下载站是 WordPress，直接访问 wp-login.php 更精准
       page.goto(f"{BASE_URL}/wp-login.php", timeout=60000, wait_until="networkidle")
-      
-      # 额外给 5 秒让 Cloudflare 验证自动通过
-      time.sleep(5)
+      time.sleep(3)
 
-      # 【修改处 1】修复：page.title() 加上了括号，page.url 是属性不加括号
       print(f"当前页面标题: {page.title()}")
       print(f"当前页面 URL: {page.url}")
 
-      # 截图保存，方便在 Artifacts 中查看
-      page.screenshot(path="debug_login.png")
-
-      print("正在查找账号密码输入框...")
-      # 【修改处 2】适配 WordPress 后台的默认表单 id (user_login / user_pass)
+      print("正在查找账号密码输入框并登录...")
       username_selector = "#user_login, input[name='log'], input[name='username']"
       password_selector = "#user_pass, input[name='pwd'], input[name='password']"
 
       page.wait_for_selector(username_selector, timeout=15000)
-
       page.fill(username_selector, USERNAME)
       page.fill(password_selector, PASSWORD)
 
-      print("正在点击登录按钮...")
-      # 【修改处 3】适配 WordPress 的登录按钮 id (wp-submit)
       submit_selector = "#wp-submit, button[type='submit'], input[type='submit']"
       page.click(submit_selector)
       
-      # 等待登录后跳转
-      time.sleep(5)
+      # 等待登录成功跳转
+      time.sleep(6)
 
       print("[2/3] 正在访问资产/个人中心页执行签到...")
       page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
       time.sleep(3)
 
-      # 检查签到按钮
-      content = page.content()
-      if "已签到" not in content:
-        print("检测到未签到，尝试寻找签到按钮...")
-        try:
-          page.click("text=签到", timeout=5000)
-          time.sleep(3)
-        except:
-          print("未直接找到‘签到’文字按钮，可能已由其他逻辑触发。")
+      # 精准通过签到按钮的专属类名（.usercheck）来检查和点击
+      try:
+        sign_element = page.locator("a.usercheck")
+        if sign_element.count() > 0:
+          btn_text = sign_element.inner_text().strip()
+          print(f"检测到签到元素，当前状态文字为: [{btn_text}]")
+          
+          # 如果还没签到（通常文字包含“签到”且没有“已”字，或者根据实际调整）
+          if "已签到" not in btn_text:
+            print("正在执行点击签到...")
+            sign_element.click()
+            time.sleep(4)
+          else:
+            print("今日已经完成签到，无需重复点击。")
+        else:
+          print("未找到 class 为 usercheck 的签到元素。")
+      except Exception as ex:
+        print(f"处理签到动作时提示: {ex}")
 
-      # 刷新页面获取最新资产数据
+      # 再次刷新页面以获取最新的金币数据
       page.reload(wait_until="networkidle")
       time.sleep(3)
       html_content = page.content()
 
       print("[3/3] 正在提取资产数据...")
+      # 匹配消费金币与剩余金币（自动忽略中间的 &nbsp; 或空格）
       spent_match = re.search(r"消费金币[：:]\s*(\d+)", html_content)
       left_match = re.search(r"剩余金币[：:]\s*(\d+)", html_content)
 
       spent_coins = spent_match.group(1) if spent_match else "未知"
       left_coins = left_match.group(1) if left_match else "未知"
 
+      # 检查最终状态
       is_signed = "已签到" in html_content
-      sign_status = "签到成功 / 今日已完成" if is_signed else "状态未知/请检查"
+      sign_status = "签到成功 / 今日已完成" if is_signed else "签到状态未知"
 
       msg_title = "【小兵下载站】自动签到通知"
       msg_content = (
@@ -147,7 +143,6 @@ def main():
         page.screenshot(path="error_screenshot.png")
       except:
         pass
-
       error_msg = f"❌ 小兵下载站签到异常\n\n错误原因: {str(e)}"
       print(error_msg)
       send_notification("【异常】小兵下载站签到失败", error_msg)
