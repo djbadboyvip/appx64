@@ -34,3 +34,10 @@ jobs:
           WECHAT_AUTH_TOKEN: ${{ secrets.WECHAT_AUTH_TOKEN }}
         run: |
           python checkin.py
+
+      - name: 上传调试截图
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshots
+          path: *.png
