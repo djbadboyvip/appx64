@@ -71,21 +71,23 @@ def main():
 
     try:
       print("[1/3] 正在访问登录页...")
-      page.goto(f"{BASE_URL}/login", timeout=60000, wait_until="networkidle")
+      # 因为小兵下载站是 WordPress，直接访问 wp-login.php 更精准
+      page.goto(f"{BASE_URL}/wp-login.php", timeout=60000, wait_until="networkidle")
       
       # 额外给 5 秒让 Cloudflare 验证自动通过
       time.sleep(5)
 
-      # 修正：page.url 和 page.title 是属性，直接调用不要加括号
-      print(f"当前页面标题: {page.title}")
+      # 【修改处 1】修复：page.title() 加上了括号，page.url 是属性不加括号
+      print(f"当前页面标题: {page.title()}")
       print(f"当前页面 URL: {page.url}")
 
       # 截图保存，方便在 Artifacts 中查看
       page.screenshot(path="debug_login.png")
 
       print("正在查找账号密码输入框...")
-      username_selector = "input[name='username'], input[type='text'], input[placeholder*='账号'], input[placeholder*='邮箱']"
-      password_selector = "input[name='password'], input[type='password'], input[placeholder*='密码']"
+      # 【修改处 2】适配 WordPress 后台的默认表单 id (user_login / user_pass)
+      username_selector = "#user_login, input[name='log'], input[name='username']"
+      password_selector = "#user_pass, input[name='pwd'], input[name='password']"
 
       page.wait_for_selector(username_selector, timeout=15000)
 
@@ -93,10 +95,11 @@ def main():
       page.fill(password_selector, PASSWORD)
 
       print("正在点击登录按钮...")
-      submit_selector = "button[type='submit'], input[type='submit'], button:has-text('登录')"
+      # 【修改处 3】适配 WordPress 的登录按钮 id (wp-submit)
+      submit_selector = "#wp-submit, button[type='submit'], input[type='submit']"
       page.click(submit_selector)
       
-      # 等待登录跳转
+      # 等待登录后跳转
       time.sleep(5)
 
       print("[2/3] 正在访问资产/个人中心页执行签到...")
