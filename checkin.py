@@ -70,41 +70,63 @@ def main():
       page.goto(f"{BASE_URL}/wp-login.php", timeout=60000, wait_until="networkidle")
       time.sleep(3)
 
-      print("正在填写账号密码...")
-      page.fill("#user_login", USERNAME)
-      page.fill("#user_pass", PASSWORD)
+      print(f"当前页面标题: {page.title()}")
+      print(f"当前页面 URL: {page.url}")
 
-      print("正在提交登录...")
+      print("正在精准定位并填写账号密码...")
+      # WordPress 默认后台专属 ID
+      page.wait_for_selector("#user_login", timeout=15000)
+      
+      # 显式点击并填入账号密码
+      page.click("#user_login")
+      page.fill("#user_login", USERNAME)
+      
+      page.click("#user_pass")
+      page.fill("#user_pass", PASSWORD)
+      
+      # 勾选“记住我”
+      try:
+        page.check("#rememberme")
+      except:
+        pass
+
+      print("正在点击登录按钮...")
+      # 点击登录，并等待页面跳转离开 wp-login.php
       with page.expect_navigation(timeout=30000):
         page.click("#wp-submit")
 
-      print(f"登录后页面 URL: {page.url}")
+      print(f"登录跳转后的 URL: {page.url}")
+
+      # 如果跳转后仍然包含 wp-login.php，说明登录被拒绝或账号密码未被接受
       if "wp-login.php" in page.url:
-        raise Exception("登录失败：后台验证未通过，请检查账号密码。")
+        page.screenshot(path="assets_page_debug.png", full_page=True)
+        raise Exception("登录失败：提交后仍停留在登录页，请核对 Secrets 中的账号与密码是否正确。")
 
       print("[2/3] 正在进入 VIP 个人中心执行签到...")
       page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
       time.sleep(5)  # 等待页面完全渲染
 
-      # 检查签到状态
+      # 📸 保存登录后的资产页截图
+      page.screenshot(path="assets_page_debug.png", full_page=True)
+
+      # 签到处理逻辑
       sign_status = "未知"
       try:
-        # 定位右上角的签到按钮/状态标识
+        # 定位右上角的签到按钮/状态标识 (a.usercheck)
         sign_btn = page.locator("a.usercheck").first
         if sign_btn.count() > 0:
           btn_text = sign_btn.inner_text().strip()
-          print(f"当前签到按钮文案: [{btn_text}]")
+          print(f"检测到签到按钮文案: [{btn_text}]")
 
           if "已签到" in btn_text:
-            print("检测到今日已完成签到。")
+            print("今日已经完成签到。")
             sign_status = "今日已签到 (无需重复)"
           else:
-            print("检测到未签到，正在点击签到...")
+            print("未签到，正在执行点击签到...")
             sign_btn.click()
             time.sleep(4)
             sign_status = "签到成功"
         else:
-          # 备用：直接检查源码
           if "已签到" in page.content():
             sign_status = "今日已签到"
           else:
@@ -116,7 +138,7 @@ def main():
         if "已签到" in page.content():
           sign_status = "今日已签到"
         else:
-          sign_status = "签到状态未知/可能已完成"
+          sign_status = "签到状态未知"
 
       # 刷新页面以获取最新的金币资产
       page.reload(wait_until="networkidle")
