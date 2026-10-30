@@ -66,65 +66,59 @@ def main():
     page = context.new_page()
 
     try:
-      print("[1/3] 正在访问登录页...")
+      print("[1/3] 正在访问后台登录页...")
       page.goto(f"{BASE_URL}/wp-login.php", timeout=60000, wait_until="networkidle")
       time.sleep(3)
 
       print("正在填写账号密码...")
-      username_selector = "#user_login, input[name='log'], input[name='username']"
-      password_selector = "#user_pass, input[name='pwd'], input[name='password']"
+      page.fill("#user_login", USERNAME)
+      page.fill("#user_pass", PASSWORD)
 
-      page.wait_for_selector(username_selector, timeout=15000)
-      page.fill(username_selector, USERNAME)
-      page.fill(password_selector, PASSWORD)
-
-      print("正在点击登录按钮并等待跳转...")
-      submit_selector = "#wp-submit, button[type='submit'], input[type='submit']"
-      
-      # 点击登录，并等待页面导航（URL 离开 wp-login.php）
+      print("正在提交登录...")
       with page.expect_navigation(timeout=30000):
-        page.click(submit_selector)
+        page.click("#wp-submit")
 
-      print(f"登录后当前页面 URL: {page.url}")
-      
-      # 检查是否依然停留在登录页（说明账号密码错误或登录被拦截）
+      print(f"登录后页面 URL: {page.url}")
       if "wp-login.php" in page.url:
-        raise Exception("登录失败：提交表单后仍停留在登录页，请检查账号密码是否正确。")
+        raise Exception("登录失败：后台验证未通过，请检查账号密码。")
 
-      print("[2/3] 正在访问资产/个人中心页执行签到...")
+      print("[2/3] 正在进入 VIP 个人中心执行签到...")
       page.goto(f"{BASE_URL}/vip?pd=money", timeout=60000, wait_until="networkidle")
       time.sleep(5)  # 等待页面完全渲染
 
-      # 📸 保存登录后资产页的截图，这次应该能看到正确的个人中心了
-      page.screenshot(path="assets_page_debug.png", full_page=True)
-
-      # 签到处理逻辑
-      signed_flag = False
+      # 检查签到状态
+      sign_status = "未知"
       try:
-        sign_element = page.locator("a.usercheck")
-        if sign_element.count() > 0:
-          btn_text = sign_element.inner_text().strip()
-          print(f"检测到签到按钮，当前文案为: [{btn_text}]")
-          
-          if "已签到" in btn_text:
-            print("今日已经完成签到，无需重复点击。")
-            signed_flag = True
-          else:
-            print("未签到，正在执行点击签到...")
-            sign_element.click()
-            time.sleep(4)
-            signed_flag = True
-        else:
-          print("未找到 class 为 usercheck 的元素，尝试通过文字查找...")
-          text_btn = page.locator("text=签到").first
-          if text_btn.count() > 0 and "已签到" not in text_btn.inner_text():
-            text_btn.click()
-            time.sleep(4)
-            signed_flag = True
-      except Exception as ex:
-        print(f"签到交互提示: {ex}")
+        # 定位右上角的签到按钮/状态标识
+        sign_btn = page.locator("a.usercheck").first
+        if sign_btn.count() > 0:
+          btn_text = sign_btn.inner_text().strip()
+          print(f"当前签到按钮文案: [{btn_text}]")
 
-      # 再次刷新页面以获取最新的金币数据
+          if "已签到" in btn_text:
+            print("检测到今日已完成签到。")
+            sign_status = "今日已签到 (无需重复)"
+          else:
+            print("检测到未签到，正在点击签到...")
+            sign_btn.click()
+            time.sleep(4)
+            sign_status = "签到成功"
+        else:
+          # 备用：直接检查源码
+          if "已签到" in page.content():
+            sign_status = "今日已签到"
+          else:
+            page.locator("text=签到").first.click()
+            time.sleep(4)
+            sign_status = "签到成功"
+      except Exception as ex:
+        print(f"签到步骤提示: {ex}")
+        if "已签到" in page.content():
+          sign_status = "今日已签到"
+        else:
+          sign_status = "签到状态未知/可能已完成"
+
+      # 刷新页面以获取最新的金币资产
       page.reload(wait_until="networkidle")
       time.sleep(3)
       html_content = page.content()
@@ -135,12 +129,6 @@ def main():
 
       spent_coins = spent_match.group(1) if spent_match else "获取失败"
       left_coins = left_match.group(1) if left_match else "获取失败"
-
-      # 状态判断
-      if "已签到" in html_content or signed_flag:
-        sign_status = "签到成功 / 今日已完成"
-      else:
-        sign_status = "签到状态未知"
 
       msg_title = "【小兵下载站】自动签到通知"
       msg_content = (
