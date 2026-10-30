@@ -1,0 +1,36 @@
+name: AppX64 Auto Checkin
+
+on:
+  schedule:
+    - cron: '30 23 * * *' # 每天 UTC 23:30 运行 (北京时间早上 07:30)
+  workflow_dispatch: # 支持手动触发
+
+jobs:
+  checkin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 安装依赖
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests playwright
+          playwright install chromium --with-deps
+
+      - name: 运行自动签到脚本
+        env:
+          APP_USERNAME: ${{ secrets.APP_USERNAME }}
+          APP_PASSWORD: ${{ secrets.APP_PASSWORD }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          WECHAT_API_URL: ${{ secrets.WECHAT_API_URL }}
+          WECHAT_AUTH_TOKEN: ${{ secrets.WECHAT_AUTH_TOKEN }}
+        run: |
+          python checkin.py
