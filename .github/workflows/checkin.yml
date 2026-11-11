@@ -16,14 +16,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          # 已移除导致报错的 cache: 'pip'
 
       - name: 缓存 Playwright 浏览器内核
         uses: actions/cache@v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('checkin.py') }}
+          # 加上 playwright 库版本号作为缓存 key 的一部分，避免版本升级后缓存不匹配
+          key: ${{ runner.os }}-playwright-${{ hashFiles('**/requirements.txt', 'checkin.py') }}
           restore-keys: |
             ${{ runner.os }}-playwright-
 
@@ -32,10 +32,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests playwright
 
-      - name: 安装 Playwright 浏览器（仅在没有缓存时下载）
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - name: 安装 Playwright 浏览器
+        # 移除 if 条件，改为每次都执行。如果已缓存且版本一致，playwright 会自动跳过下载，秒完成
         run: |
-          playwright install chromium --with-deps
+          playwright install chromium
 
       - name: 运行自动签到脚本
         env:
